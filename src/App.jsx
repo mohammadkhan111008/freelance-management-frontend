@@ -5,8 +5,9 @@ import ProjectOverview from './pages/ProjectOverview';
 import ProjectBuilders from './pages/ProjectBuilders';
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState('overview'); // Landing default route set to top item
+  const [currentPage, setCurrentPage] = useState('overview'); 
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false); // Mobile state control
 
   return (
     <Layout 
@@ -14,6 +15,8 @@ export default function App() {
       setCurrentPage={setCurrentPage}
       isCollapsed={isCollapsed}
       setIsCollapsed={setIsCollapsed}
+      isMobileOpen={isMobileOpen}
+      setIsMobileOpen={setIsMobileOpen}
     >
       {currentPage === 'engine' && <ProjectManagement />}
       {currentPage === 'overview' && <ProjectOverview />}
