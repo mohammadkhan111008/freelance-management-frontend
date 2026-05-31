@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Plus, SlidersHorizontal, Trash2, DollarSign, Users, Database, LayoutGrid, TableProperties } from 'lucide-react';
 import axios from 'axios'; // Or use window.fetch if you don't use axios
 
-const API_BASE_URL = 'http://localhost:8080/api/projects';
+const API_BASE_URL =
+'https://freelance-management-backend-r4o5.onrender.com/projects';
 
 function LocalStatusBadge({ status }) {
   const styles = {
