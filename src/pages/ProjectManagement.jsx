@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Plus, SlidersHorizontal, Edit2, Trash2, DollarSign, Users, Database, LayoutGrid, TableProperties, X } from 'lucide-react';
+import { Search, Plus, SlidersHorizontal, Trash2, DollarSign, Users, Database, LayoutGrid, TableProperties } from 'lucide-react';
+import axios from 'axios'; // Or use window.fetch if you don't use axios
 
-// --- INLINE SELF-CONTAINED STATUS BADGE ---
+const API_BASE_URL = 'http://localhost:8080/api/projects';
+
 function LocalStatusBadge({ status }) {
   const styles = {
     'Completed': 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -22,9 +24,8 @@ export default function ProjectManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [viewType, setViewType] = useState('cards'); 
-  const [selectedProject, setSelectedProject] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [stats, setStats] = useState({ totalBudget: 48250, activeNodes: 14, databaseHealthy: false });
+  const [stats, setStats] = useState({ totalBudget: 0, activeNodes: 0, databaseHealthy: true });
 
   // Form Inputs
   const [formName, setFormName] = useState('');
@@ -35,26 +36,33 @@ export default function ProjectManagement() {
   const [formDueDate, setFormDueDate] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
+  // 🔄 FETCH FROM SPRING BOOT BACKEND
+  const loadProjectGrid = async () => {
+    try {
+      const response = await axios.get(API_BASE_URL);
+      const data = response.data || [];
+      setProjects(data);
+      calculateStats(data);
+    } catch (error) {
+      console.error("Backend connection error mapping resource controllers:", error);
+      setStats(prev => ({ ...prev, databaseHealthy: false }));
+    }
+  };
+
   useEffect(() => { 
     loadProjectGrid(); 
   }, []);
 
-  const loadProjectGrid = () => {
-    // Hardcoded initial data to guarantee the UI loads safely even if api files are missing
-    const initialData = [
-      { id: 1, projectName: 'Apollo Web Framework', clientName: 'Stripe Labs', assignedDeveloper: 'Daksh Sevkani', status: 'In Progress', cost: 12500.0, dueDate: '2026-06-15', notes: 'Core runtime build decoupled infrastructure mapping.' },
-      { id: 2, projectName: 'Vector Processing Core', clientName: 'Vercel Inc', assignedDeveloper: 'Sarah Jenkins', status: 'Completed', cost: 8400.0, dueDate: '2026-05-01', notes: 'Completed ahead of execution timeline schedule.' }
-    ];
-    setProjects(initialData);
-    const total = initialData.reduce((acc, curr) => acc + (curr.cost || 0), 0);
-    const active = initialData.filter(p => p.status === 'In Progress').length;
-    setStats({ totalBudget: total, activeNodes: active, databaseHealthy: false });
+  const calculateStats = (data) => {
+    const total = data.reduce((acc, curr) => acc + (parseFloat(curr.cost) || 0), 0);
+    const active = data.filter(p => p.status === 'In Progress').length;
+    setStats({ totalBudget: total, activeNodes: active, databaseHealthy: true });
   };
 
-  const handleCreate = (e) => {
+  // ➕ POST TO SPRING BOOT BACKEND
+  const handleCreate = async (e) => {
     e.preventDefault();
     const newProject = {
-      id: Date.now(),
       projectName: formName,
       clientName: formClient,
       assignedDeveloper: formDeveloper,
@@ -63,29 +71,34 @@ export default function ProjectManagement() {
       dueDate: formDueDate,
       notes: formNotes
     };
-    const updated = [newProject, ...projects];
-    setProjects(updated);
-    setIsCreateModalOpen(false);
-    
-    const total = updated.reduce((acc, curr) => acc + (curr.cost || 0), 0);
-    const active = updated.filter(p => p.status === 'In Progress').length;
-    setStats({ totalBudget: total, activeNodes: active, databaseHealthy: false });
-    
-    // Clear form
-    setFormName(''); setFormClient(''); setFormDeveloper('');
-    setFormStatus('Pending'); setFormCost(''); setFormDueDate(''); setFormNotes('');
+
+    try {
+      await axios.post(API_BASE_URL, newProject);
+      setIsCreateModalOpen(false);
+      loadProjectGrid(); // Refresh data grid natively from db
+      
+      // Clear Form
+      setFormName(''); setFormClient(''); setFormDeveloper('');
+      setFormStatus('Pending'); setFormCost(''); setFormDueDate(''); setFormNotes('');
+    } catch (error) {
+      console.error("Failed to post record mapping context to database:", error);
+    }
   };
 
-  const handleDelete = (id) => {
-    const updated = projects.filter(p => p.id !== id);
-    setProjects(updated);
-    const total = updated.reduce((acc, curr) => acc + (curr.cost || 0), 0);
-    const active = updated.filter(p => p.status === 'In Progress').length;
-    setStats({ totalBudget: total, activeNodes: active, databaseHealthy: false });
+  // ❌ DELETE FROM SPRING BOOT BACKEND
+  const handleDelete = async (id) => {
+    try {
+      await axios.delete(`${API_BASE_URL}/${id}`);
+      loadProjectGrid(); // Synchronize view state
+    } catch (error) {
+      console.error("Failed structural mutation slice on record ID:", id, error);
+    }
   };
 
   const filteredProjects = projects.filter(p => {
-    const matchesSearch = p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) || p.clientName?.toLowerCase().includes(searchQuery.toLowerCase());
+    const nameMatch = p.projectName?.toLowerCase().includes(searchQuery.toLowerCase());
+    const clientMatch = p.clientName?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = nameMatch || clientMatch;
     return matchesSearch && (statusFilter === 'All' || p.status === statusFilter);
   });
 
@@ -95,8 +108,8 @@ export default function ProjectManagement() {
       <div className="space-y-4">
         <div>
           <div className="flex items-center gap-2 text-xs font-mono font-black text-indigo-600 uppercase tracking-wider">
-            <span className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse" />
-            Active Cluster Velocity
+            <span className={`h-2 w-2 rounded-full ${stats.databaseHealthy ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+            {stats.databaseHealthy ? 'Live Backend Channel Active' : 'Backend Channel Offline'}
           </div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight mt-1">Manage Freelancer Console</h1>
         </div>
@@ -104,15 +117,15 @@ export default function ProjectManagement() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
             <div className="flex justify-between items-center mb-2"><span className="text-[11px] font-mono text-slate-500 uppercase font-black tracking-wider">Total Portfolio Valuation</span><div className="p-1.5 bg-emerald-50 rounded-lg text-emerald-600"><DollarSign size={14} /></div></div>
-            <p className="text-3xl font-black text-slate-900">${stats.totalBudget.toLocaleString()}</p>
+            <p className="text-3xl font-black text-slate-900">${stats.totalBudget.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
           <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
             <div className="flex justify-between items-center mb-2"><span className="text-[11px] font-mono text-slate-500 uppercase font-black tracking-wider">Assigned Engineering Nodes</span><div className="p-1.5 bg-indigo-50 rounded-lg text-indigo-600"><Users size={14} /></div></div>
             <p className="text-3xl font-black text-slate-900">{stats.activeNodes} Active</p>
           </div>
           <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
-            <div className="flex justify-between items-center mb-2"><span className="text-[11px] font-mono text-slate-500 uppercase font-black tracking-wider">Database Synchronization</span><div className="p-1.5 rounded-lg bg-amber-50 text-amber-600"><Database size={14} /></div></div>
-            <p className="text-3xl font-black text-slate-900">SIMULATED</p>
+            <div className="flex justify-between items-center mb-2"><span className="text-[11px] font-mono text-slate-500 uppercase font-black tracking-wider">Database Synchronizer</span><div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600"><Database size={14} /></div></div>
+            <p className="text-3xl font-black text-slate-900">{stats.databaseHealthy ? 'CONNECTED' : 'DISCONNECTED'}</p>
           </div>
         </div>
       </div>
@@ -124,7 +137,7 @@ export default function ProjectManagement() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-black tracking-tight text-slate-900">Project Pipeline Core</h2>
-            <p className="text-xs font-bold text-slate-500 mt-0.5">Toggle interface frameworks and execute structural modifications on resource mappings.</p>
+            <p className="text-xs font-bold text-slate-500 mt-0.5">Execute structural modifications natively synchronized with the PostgreSQL schemas.</p>
           </div>
           <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer shrink-0">
             <Plus size={15} />
@@ -162,20 +175,8 @@ export default function ProjectManagement() {
             </div>
 
             <div className="flex items-center border border-slate-200 bg-slate-50 p-1 rounded-lg shrink-0">
-              <button 
-                onClick={() => setViewType('cards')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-black transition-all cursor-pointer ${viewType === 'cards' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
-              >
-                <LayoutGrid size={13} />
-                <span>Cards</span>
-              </button>
-              <button 
-                onClick={() => setViewType('table')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-black transition-all cursor-pointer ${viewType === 'table' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
-              >
-                <TableProperties size={13} />
-                <span>Table</span>
-              </button>
+              <button onClick={() => setViewType('cards')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-black transition-all cursor-pointer ${viewType === 'cards' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}><LayoutGrid size={13} /><span>Cards</span></button>
+              <button onClick={() => setViewType('table')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-black transition-all cursor-pointer ${viewType === 'table' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}><TableProperties size={13} /><span>Table</span></button>
             </div>
           </div>
         </div>
@@ -196,7 +197,7 @@ export default function ProjectManagement() {
                     </div>
                     <div className="space-y-2 my-4 border-t border-b border-slate-100 py-4 font-mono text-[11px]">
                       <div className="flex justify-between"><span className="text-slate-400 font-bold">ENGINEER:</span><span className="text-slate-900 font-black">{project.assignedDeveloper}</span></div>
-                      <div className="flex justify-between"><span className="text-slate-400 font-bold">CONTRACT VALUATION:</span><span className="text-indigo-600 font-black">${project.cost?.toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-400 font-bold">CONTRACT VALUATION:</span><span className="text-indigo-600 font-black">${parseFloat(project.cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
                       <div className="flex justify-between"><span className="text-slate-400 font-bold">TARGET DATE:</span><span className="text-slate-900 font-black">{project.dueDate}</span></div>
                     </div>
                     {project.notes && <p className="text-xs font-bold text-slate-600 bg-slate-50 border border-slate-100 p-3 rounded-xl line-clamp-2 mb-4">{project.notes}</p>}
@@ -228,7 +229,7 @@ export default function ProjectManagement() {
                         <td className="p-4 text-slate-900 font-extrabold">{project.projectName}</td>
                         <td className="p-4 text-slate-600">{project.clientName}</td>
                         <td className="p-4 font-mono text-[11px] text-slate-800">{project.assignedDeveloper}</td>
-                        <td className="p-4 font-mono text-[11px] text-indigo-600 font-black">${project.cost?.toLocaleString()}</td>
+                        <td className="p-4 font-mono text-[11px] text-indigo-600 font-black">${parseFloat(project.cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="p-4 font-mono text-[11px] text-slate-500">{project.dueDate}</td>
                         <td className="p-4"><LocalStatusBadge status={project.status} /></td>
                         <td className="p-4 text-right">
@@ -246,7 +247,7 @@ export default function ProjectManagement() {
 
       {/* Setup Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex justify-center items-center z-50 p-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex justify-center items-center z-50 p-4">
           <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="bg-white border border-slate-200 w-full max-w-md rounded-2xl p-6 shadow-xl text-slate-900">
             <h3 className="text-sm font-black text-slate-900 mb-4">Provision Project Context</h3>
             <form onSubmit={handleCreate} className="space-y-4 text-xs font-bold">
