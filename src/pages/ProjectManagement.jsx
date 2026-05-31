@@ -26,11 +26,15 @@ export default function ProjectManagement() {
   const [viewType, setViewType] = useState('cards'); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
-  const [httpMethod, setHttpMethod] = useState('PUT'); // Tracks if user selected PUT or PATCH
-  const [activeMenuId, setActiveMenuId] = useState(null); // Track which card's edit menu is open
+  const [httpMethod, setHttpMethod] = useState('PUT'); 
+  const [activeMenuId, setActiveMenuId] = useState(null); 
   const [stats, setStats] = useState({ totalBudget: 0, activeNodes: 0, databaseHealthy: true });
 
-  // Form Inputs State
+  // PATCH-specific target states
+  const [patchField, setPatchField] = useState('projectName');
+  const [patchValue, setPatchValue] = useState('');
+
+  // PUT / POST Form Inputs State
   const [formName, setFormName] = useState('');
   const [formClient, setFormClient] = useState('');
   const [formDeveloper, setFormDeveloper] = useState('');
@@ -39,7 +43,6 @@ export default function ProjectManagement() {
   const [formDueDate, setFormDueDate] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
-  // 🔄 FETCH FROM LIVE RENDER BACKEND
   const loadProjectGrid = async () => {
     try {
       const response = await axios.get(API_BASE_URL);
@@ -54,8 +57,6 @@ export default function ProjectManagement() {
 
   useEffect(() => { 
     loadProjectGrid(); 
-    
-    // Close dropdowns if clicking elsewhere
     const closeMenus = () => setActiveMenuId(null);
     window.addEventListener('click', closeMenus);
     return () => window.removeEventListener('click', closeMenus);
@@ -67,21 +68,39 @@ export default function ProjectManagement() {
     setStats({ totalBudget: total, activeNodes: active, databaseHealthy: true });
   };
 
-  // 📝 TRIGGER ACTIONS FROM THE EDIT MENU OPTIONS
   const handleEditSelect = (e, project, method) => {
-    e.stopPropagation(); // Stop menu from closing immediately
+    e.stopPropagation(); 
     setEditingProject(project);
     setHttpMethod(method);
     setActiveMenuId(null);
 
-    setFormName(project.projectName || '');
-    setFormClient(project.clientName || '');
-    setFormDeveloper(project.assignedDeveloper || '');
-    setFormStatus(project.status || 'Pending');
-    setFormCost(project.cost || '');
-    setFormDueDate(project.dueDate || '');
-    setFormNotes(project.notes || '');
+    if (method === 'PATCH') {
+      setPatchField('projectName');
+      setPatchValue(project.projectName || '');
+    } else {
+      setFormName(project.projectName || '');
+      setFormClient(project.clientName || '');
+      setFormDeveloper(project.assignedDeveloper || '');
+      setFormStatus(project.status || 'Pending');
+      setFormCost(project.cost || '');
+      setFormDueDate(project.dueDate || '');
+      setFormNotes(project.notes || '');
+    }
     setIsModalOpen(true);
+  };
+
+  // Handle changing the target patch field to auto-populate existing value
+  const handlePatchFieldChange = (field) => {
+    setPatchField(field);
+    if (!editingProject) return;
+    
+    if (field === 'cost') setPatchValue(editingProject.cost || '');
+    else if (field === 'projectName') setPatchValue(editingProject.projectName || '');
+    else if (field === 'clientName') setPatchValue(editingProject.clientName || '');
+    else if (field === 'assignedDeveloper') setPatchValue(editingProject.assignedDeveloper || '');
+    else if (field === 'status') setPatchValue(editingProject.status || 'Pending');
+    else if (field === 'dueDate') setPatchValue(editingProject.dueDate || '');
+    else if (field === 'notes') setPatchValue(editingProject.notes || '');
   };
 
   const openCreateModal = () => {
@@ -92,23 +111,17 @@ export default function ProjectManagement() {
     setIsModalOpen(true);
   };
 
-  // 💾 SAVE MUTATION (DYNAMICAL ROUTING TO PUT OR PATCH)
   const handleSave = async (e) => {
     e.preventDefault();
     
     let projectPayload = {};
     
     if (httpMethod === 'PATCH') {
-      // Send only filled fields to match patch delta schema rules
-      if (formName) projectPayload.projectName = formName;
-      if (formClient) projectPayload.clientName = formClient;
-      if (formDeveloper) projectPayload.assignedDeveloper = formDeveloper;
-      if (formStatus) projectPayload.status = formStatus;
-      if (formCost) projectPayload.cost = parseFloat(formCost);
-      if (formDueDate) projectPayload.dueDate = formDueDate;
-      if (formNotes) projectPayload.notes = formNotes;
+      // Send exactly ONE key-value pair to your controller
+      const targetValue = patchField === 'cost' ? parseFloat(patchValue) || 0 : patchValue;
+      projectPayload = { [patchField]: targetValue };
     } else {
-      // Full PUT/POST body mapping replacement snapshot
+      // Full body snapshot for PUT/POST
       projectPayload = {
         projectName: formName,
         clientName: formClient,
@@ -179,12 +192,12 @@ export default function ProjectManagement() {
 
       <hr className="border-slate-200" />
 
-      {/* Main Grid View Controller */}
+      {/* Control Pipeline Actions */}
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-black tracking-tight text-slate-900">Project Pipeline Core</h2>
-            <p className="text-xs font-bold text-slate-500 mt-0.5">Execute structural edits natively synchronized via endpoints with custom request headers.</p>
+            <p className="text-xs font-bold text-slate-500 mt-0.5">Natively synchronized with Spring Boot PUT and PATCH endpoint mapping rules.</p>
           </div>
           <button onClick={openCreateModal} className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer shrink-0">
             <Plus size={15} />
@@ -228,7 +241,7 @@ export default function ProjectManagement() {
           </div>
         </div>
 
-        {/* Deliver Nodes Content */}
+        {/* Layout Nodes Delivery */}
         <AnimatePresence mode="wait">
           {viewType === 'cards' ? (
             <motion.div key="cards" className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -250,7 +263,6 @@ export default function ProjectManagement() {
                     {project.notes && <p className="text-xs font-bold text-slate-600 bg-slate-50 border border-slate-100 p-3 rounded-xl line-clamp-2 mb-4">{project.notes}</p>}
                   </div>
                   
-                  {/* Action Bar Footer with Dropdown Engine Menu */}
                   <div className="flex justify-end gap-2 pt-3 border-t border-slate-100/60 relative">
                     <div className="relative">
                       <button 
@@ -261,15 +273,13 @@ export default function ProjectManagement() {
                         <span>Edit</span>
                       </button>
 
-                      {/* Dropdown Options for PUT and PATCH */}
                       {activeMenuId === `card-${project.id}` && (
                         <div className="absolute right-0 bottom-full mb-2 w-36 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-10 font-mono text-[11px]">
-                          <button onClick={(e) => handleEditSelect(e, project, 'PUT')} className="w-full text-left px-3 py-2 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2 font-black"><RefreshCw size={12} />PUT (Replace)</button>
-                          <button onClick={(e) => handleEditSelect(e, project, 'PATCH')} className="w-full text-left px-3 py-2 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2 font-black"><Layers size={12} />PATCH (Update)</button>
+                          <button onClick={(e) => handleEditSelect(e, project, 'PUT')} className="w-full text-left px-3 py-2 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2 font-black"><RefreshCw size={12} />PUT (Full)</button>
+                          <button onClick={(e) => handleEditSelect(e, project, 'PATCH')} className="w-full text-left px-3 py-2 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2 font-black"><Layers size={12} />PATCH (Single)</button>
                         </div>
                       )}
                     </div>
-
                     <button onClick={() => handleDelete(project.id)} className="p-1.5 border border-slate-200 hover:bg-red-50 rounded-md text-slate-400 hover:text-red-600 cursor-pointer"><Trash2 size={12} /></button>
                   </div>
                 </div>
@@ -312,8 +322,8 @@ export default function ProjectManagement() {
                               
                               {activeMenuId === `table-${project.id}` && (
                                 <div className="absolute right-0 bottom-full mb-2 w-36 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-10 font-mono text-[11px] text-left">
-                                  <button onClick={(e) => handleEditSelect(e, project, 'PUT')} className="w-full text-left px-3 py-2 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2 font-black"><RefreshCw size={11} />PUT (Replace)</button>
-                                  <button onClick={(e) => handleEditSelect(e, project, 'PATCH')} className="w-full text-left px-3 py-2 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2 font-black"><Layers size={11} />PATCH (Update)</button>
+                                  <button onClick={(e) => handleEditSelect(e, project, 'PUT')} className="w-full text-left px-3 py-2 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2 font-black"><RefreshCw size={11} />PUT (Full)</button>
+                                  <button onClick={(e) => handleEditSelect(e, project, 'PATCH')} className="w-full text-left px-3 py-2 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2 font-black"><Layers size={11} />PATCH (Single)</button>
                                 </div>
                               )}
                             </div>
@@ -330,13 +340,13 @@ export default function ProjectManagement() {
         </AnimatePresence>
       </div>
 
-      {/* Shared Edit & Create Modal Container */}
+      {/* Dynamic Modal Interface Router */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex justify-center items-center z-50 p-4">
           <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="bg-white border border-slate-200 w-full max-w-md rounded-2xl p-6 shadow-xl text-slate-900">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-sm font-black text-slate-900">
-                {editingProject ? 'Modify Project Context Record' : 'Provision Project Context'}
+                {editingProject ? 'Modify Project Context' : 'Provision Project Context'}
               </h3>
               <span className={`text-[10px] font-mono font-black px-2 py-0.5 rounded-md border ${httpMethod === 'PATCH' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200'}`}>
                 HTTP MODE: {httpMethod}
@@ -344,47 +354,98 @@ export default function ProjectManagement() {
             </div>
             
             <form onSubmit={handleSave} className="space-y-4 text-xs font-bold">
-              <div>
-                <label className="block text-slate-700 mb-1">Project Name</label>
-                <input type="text" value={formName} onChange={e => setFormName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500" required={httpMethod !== 'PATCH'} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 mb-1">Client Identity</label>
-                  <input type="text" value={formClient} onChange={e => setFormClient(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500" required={httpMethod !== 'PATCH'} />
+              {httpMethod === 'PATCH' ? (
+                /* Pure Single Element Delta Isolation Mode */
+                <div className="space-y-4 bg-slate-50 border border-slate-100 p-4 rounded-xl">
+                  <div>
+                    <label className="block text-slate-500 text-[10px] font-mono uppercase font-black mb-1">1. Select Target Mutation Field</label>
+                    <select 
+                      value={patchField} 
+                      onChange={e => handlePatchFieldChange(e.target.value)} 
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-900 focus:outline-none font-black cursor-pointer"
+                    >
+                      <option value="projectName">Project Name</option>
+                      <option value="clientName">Client Identity</option>
+                      <option value="assignedDeveloper">Assigned Deployer</option>
+                      <option value="cost">Valuation ($)</option>
+                      <option value="dueDate">Target Date</option>
+                      <option value="status">Pipeline Status</option>
+                      <option value="notes">Context Notes</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-500 text-[10px] font-mono uppercase font-black mb-1">2. Target Value Configuration</label>
+                    {patchField === 'status' ? (
+                      <select value={patchValue} onChange={e => setPatchValue(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-900 focus:outline-none cursor-pointer">
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    ) : patchField === 'dueDate' ? (
+                      <input type="date" value={patchValue} onChange={e => setPatchValue(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-900 focus:outline-none" required />
+                    ) : patchField === 'notes' ? (
+                      <textarea value={patchValue} onChange={e => setPatchValue(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2.5 h-16 text-slate-900 focus:outline-none" />
+                    ) : (
+                      <input 
+                        type={patchField === 'cost' ? 'number' : 'text'} 
+                        step={patchField === 'cost' ? '0.01' : undefined} 
+                        value={patchValue} 
+                        onChange={e => setPatchValue(e.target.value)} 
+                        className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500" 
+                        required 
+                      />
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-slate-700 mb-1">Assigned Deployer</label>
-                  <input type="text" value={formDeveloper} onChange={e => setFormDeveloper(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500" required={httpMethod !== 'PATCH'} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 mb-1">Valuation ($)</label>
-                  <input type="number" step="0.01" value={formCost} onChange={e => setFormCost(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500" required={httpMethod !== 'PATCH'} />
-                </div>
-                <div>
-                  <label className="block text-slate-700 mb-1">Target Date</label>
-                  <input type="date" value={formDueDate} onChange={e => setFormDueDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none focus:border-indigo-500" required={httpMethod !== 'PATCH'} />
-                </div>
-              </div>
-              <div>
-                <label className="block text-slate-700 mb-1">Pipeline Status</label>
-                <select value={formStatus} onChange={e => setFormStatus(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
-                  <option value="Pending">Pending</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-slate-700 mb-1">Context Notes</label>
-                <textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 h-16 text-slate-900 focus:outline-none focus:border-indigo-500" />
-              </div>
+              ) : (
+                /* Traditional Blueprint replacement context fields */
+                <>
+                  <div>
+                    <label className="block text-slate-700 mb-1">Project Name</label>
+                    <input type="text" value={formName} onChange={e => setFormName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500" required />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-700 mb-1">Client Identity</label>
+                      <input type="text" value={formClient} onChange={e => setFormClient(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500" required />
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 mb-1">Assigned Deployer</label>
+                      <input type="text" value={formDeveloper} onChange={e => setFormDeveloper(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500" required />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-700 mb-1">Valuation ($)</label>
+                      <input type="number" step="0.01" value={formCost} onChange={e => setFormCost(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500" required />
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 mb-1">Target Date</label>
+                      <input type="date" value={formDueDate} onChange={e => setFormDueDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none focus:border-indigo-500" required />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 mb-1">Pipeline Status</label>
+                    <select value={formStatus} onChange={e => setFormStatus(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                      <option value="Pending">Pending</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 mb-1">Context Notes</label>
+                    <textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 h-16 text-slate-900 focus:outline-none focus:border-indigo-500" />
+                  </div>
+                </>
+              )}
+              
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-3.5 py-2 text-slate-500 hover:text-slate-800 cursor-pointer">Cancel</button>
                 <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2 rounded-lg cursor-pointer">
-                  {httpMethod === 'PATCH' ? 'Apply Patch Delta' : 'Commit Full Record'}
+                  {httpMethod === 'PATCH' ? 'Fire Isolated Patch Delta' : 'Commit Full Record'}
                 </button>
               </div>
             </form>
