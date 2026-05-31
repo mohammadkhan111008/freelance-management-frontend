@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Plus, SlidersHorizontal, Trash2, DollarSign, Users, Database, LayoutGrid, TableProperties } from 'lucide-react';
-import axios from 'axios'; // Or use window.fetch if you don't use axios
+import { Search, Plus, SlidersHorizontal, Edit2, Trash2, DollarSign, Users, Database, LayoutGrid, TableProperties } from 'lucide-react';
+import axios from 'axios';
 
 const API_BASE_URL =
 'https://freelance-management-backend-r4o5.onrender.com/projects';
@@ -25,10 +25,11 @@ export default function ProjectManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [viewType, setViewType] = useState('cards'); 
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
   const [stats, setStats] = useState({ totalBudget: 0, activeNodes: 0, databaseHealthy: true });
 
-  // Form Inputs
+  // Form Inputs State
   const [formName, setFormName] = useState('');
   const [formClient, setFormClient] = useState('');
   const [formDeveloper, setFormDeveloper] = useState('');
@@ -37,7 +38,7 @@ export default function ProjectManagement() {
   const [formDueDate, setFormDueDate] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
-  // 🔄 FETCH FROM SPRING BOOT BACKEND
+  // 🔄 FETCH FROM SPRING BOOT
   const loadProjectGrid = async () => {
     try {
       const response = await axios.get(API_BASE_URL);
@@ -60,10 +61,31 @@ export default function ProjectManagement() {
     setStats({ totalBudget: total, activeNodes: active, databaseHealthy: true });
   };
 
-  // ➕ POST TO SPRING BOOT BACKEND
-  const handleCreate = async (e) => {
+  // 📝 OPEN MODAL FOR CREATE
+  const openCreateModal = () => {
+    setEditingProject(null);
+    setFormName(''); setFormClient(''); setFormDeveloper('');
+    setFormStatus('Pending'); setFormCost(''); setFormDueDate(''); setFormNotes('');
+    setIsModalOpen(true);
+  };
+
+  // 📝 OPEN MODAL FOR EDIT
+  const openEditModal = (project) => {
+    setEditingProject(project);
+    setFormName(project.projectName || '');
+    setFormClient(project.clientName || '');
+    setFormDeveloper(project.assignedDeveloper || '');
+    setFormStatus(project.status || 'Pending');
+    setFormCost(project.cost || '');
+    setFormDueDate(project.dueDate || '');
+    setFormNotes(project.notes || '');
+    setIsModalOpen(true);
+  };
+
+  // 💾 SAVE HANDLE (CREATE OR UPDATE)
+  const handleSave = async (e) => {
     e.preventDefault();
-    const newProject = {
+    const projectPayload = {
       projectName: formName,
       clientName: formClient,
       assignedDeveloper: formDeveloper,
@@ -74,23 +96,25 @@ export default function ProjectManagement() {
     };
 
     try {
-      await axios.post(API_BASE_URL, newProject);
-      setIsCreateModalOpen(false);
-      loadProjectGrid(); // Refresh data grid natively from db
-      
-      // Clear Form
-      setFormName(''); setFormClient(''); setFormDeveloper('');
-      setFormStatus('Pending'); setFormCost(''); setFormDueDate(''); setFormNotes('');
+      if (editingProject) {
+        // PUT update requests to backend
+        await axios.put(`${API_BASE_URL}/${editingProject.id}`, projectPayload);
+      } else {
+        // POST new records to backend
+        await axios.post(API_BASE_URL, projectPayload);
+      }
+      setIsModalOpen(false);
+      loadProjectGrid();
     } catch (error) {
-      console.error("Failed to post record mapping context to database:", error);
+      console.error("Failed to persist database resource record state mapping:", error);
     }
   };
 
-  // ❌ DELETE FROM SPRING BOOT BACKEND
+  // ❌ DELETE RESOURCE FROM BACKEND
   const handleDelete = async (id) => {
     try {
       await axios.delete(`${API_BASE_URL}/${id}`);
-      loadProjectGrid(); // Synchronize view state
+      loadProjectGrid();
     } catch (error) {
       console.error("Failed structural mutation slice on record ID:", id, error);
     }
@@ -99,13 +123,12 @@ export default function ProjectManagement() {
   const filteredProjects = projects.filter(p => {
     const nameMatch = p.projectName?.toLowerCase().includes(searchQuery.toLowerCase());
     const clientMatch = p.clientName?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesSearch = nameMatch || clientMatch;
-    return matchesSearch && (statusFilter === 'All' || p.status === statusFilter);
+    return (nameMatch || clientMatch) && (statusFilter === 'All' || p.status === statusFilter);
   });
 
   return (
     <div className="space-y-10">
-      {/* Telemetry Panel */}
+      {/* Telemetry Header */}
       <div className="space-y-4">
         <div>
           <div className="flex items-center gap-2 text-xs font-mono font-black text-indigo-600 uppercase tracking-wider">
@@ -133,20 +156,20 @@ export default function ProjectManagement() {
 
       <hr className="border-slate-200" />
 
-      {/* Pipeline Core Section */}
+      {/* Main Core pipeline management dashboard context */}
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-black tracking-tight text-slate-900">Project Pipeline Core</h2>
             <p className="text-xs font-bold text-slate-500 mt-0.5">Execute structural modifications natively synchronized with the PostgreSQL schemas.</p>
           </div>
-          <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer shrink-0">
+          <button onClick={openCreateModal} className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer shrink-0">
             <Plus size={15} />
             Provision Project Record
           </button>
         </div>
 
-        {/* Toolbar Grid/Table Mode */}
+        {/* Search and Filters Toolbar */}
         <div className="flex flex-col lg:flex-row gap-4 p-3.5 bg-white border border-slate-200 rounded-xl shadow-xs">
           <div className="relative flex-1 w-full">
             <Search size={15} className="absolute left-3 top-3 text-slate-400" />
@@ -182,7 +205,7 @@ export default function ProjectManagement() {
           </div>
         </div>
 
-        {/* Content Render Switch */}
+        {/* Content Views */}
         <AnimatePresence mode="wait">
           {viewType === 'cards' ? (
             <motion.div key="cards" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -203,7 +226,9 @@ export default function ProjectManagement() {
                     </div>
                     {project.notes && <p className="text-xs font-bold text-slate-600 bg-slate-50 border border-slate-100 p-3 rounded-xl line-clamp-2 mb-4">{project.notes}</p>}
                   </div>
+                  {/* Footer actions with edit button put back right here */}
                   <div className="flex justify-end gap-2 pt-3 border-t border-slate-100/60">
+                    <button onClick={() => openEditModal(project)} className="p-1.5 border border-slate-200 hover:bg-slate-50 rounded-md text-slate-500 hover:text-slate-900 cursor-pointer"><Edit2 size={12} /></button>
                     <button onClick={() => handleDelete(project.id)} className="p-1.5 border border-slate-200 hover:bg-red-50 rounded-md text-slate-400 hover:text-red-600 cursor-pointer"><Trash2 size={12} /></button>
                   </div>
                 </div>
@@ -233,8 +258,9 @@ export default function ProjectManagement() {
                         <td className="p-4 font-mono text-[11px] text-indigo-600 font-black">${parseFloat(project.cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="p-4 font-mono text-[11px] text-slate-500">{project.dueDate}</td>
                         <td className="p-4"><LocalStatusBadge status={project.status} /></td>
-                        <td className="p-4 text-right">
-                          <button onClick={() => handleDelete(project.id)} className="p-1.5 border border-slate-200 hover:bg-red-50 rounded-md text-slate-400 hover:text-red-600 cursor-pointer"><Trash2 size={11} /></button>
+                        <td className="p-4 text-right space-x-1.5">
+                          <button onClick={() => openEditModal(project)} className="p-1.5 border border-slate-200 hover:bg-slate-50 rounded-md text-slate-500 hover:text-slate-900 cursor-pointer inline-flex"><Edit2 size={11} /></button>
+                          <button onClick={() => handleDelete(project.id)} className="p-1.5 border border-slate-200 hover:bg-red-50 rounded-md text-slate-400 hover:text-red-600 cursor-pointer inline-flex"><Trash2 size={11} /></button>
                         </td>
                       </tr>
                     ))}
@@ -246,12 +272,14 @@ export default function ProjectManagement() {
         </AnimatePresence>
       </div>
 
-      {/* Setup Modal */}
-      {isCreateModalOpen && (
+      {/* Shared Provisioning/Editing Modal Layout Container */}
+      {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex justify-center items-center z-50 p-4">
           <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="bg-white border border-slate-200 w-full max-w-md rounded-2xl p-6 shadow-xl text-slate-900">
-            <h3 className="text-sm font-black text-slate-900 mb-4">Provision Project Context</h3>
-            <form onSubmit={handleCreate} className="space-y-4 text-xs font-bold">
+            <h3 className="text-sm font-black text-slate-900 mb-4">
+              {editingProject ? 'Modify Project Context Record' : 'Provision Project Context'}
+            </h3>
+            <form onSubmit={handleSave} className="space-y-4 text-xs font-bold">
               <div>
                 <label className="block text-slate-700 mb-1">Project Name</label>
                 <input type="text" value={formName} onChange={e => setFormName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 focus:outline-none focus:border-indigo-500" required />
@@ -290,7 +318,7 @@ export default function ProjectManagement() {
                 <textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 h-16 text-slate-900 focus:outline-none focus:border-indigo-500" />
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="px-3.5 py-2 text-slate-500 hover:text-slate-800 cursor-pointer">Cancel</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-3.5 py-2 text-slate-500 hover:text-slate-800 cursor-pointer">Cancel</button>
                 <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2 rounded-lg cursor-pointer">Commit Record</button>
               </div>
             </form>
